@@ -47,6 +47,8 @@ export interface GameState {
   grid?: number;
   /** 是否为导入的题 */
   imported?: boolean;
+  /** 本局是否用过杀手组合助手（首次使用计 1 次辅助） */
+  comboUsed?: boolean;
 }
 
 export function geometryOf(p: PuzzleData): Geometry {

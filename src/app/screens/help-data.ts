@@ -11,8 +11,8 @@ export const LEVEL_TECH_SUMMARY: Record<Level, string> = {
 };
 
 export const KILLER_LEVEL_EXTRA: Record<Level, string> = {
-  1: '笼的唯一组合',
-  2: '组合与已填数的直接排除',
+  1: '笼的唯一组合、组合与已填数的直接排除',
+  2: '（杀手基础推理同 1 档）＋ 区块摒除',
   3: '45 法则（单个行/列/宫）、组合与候选交叉排除、笼内锁定数字',
   4: '45 法则（多格内格/外格）',
   5: '多笼联立 45 法则、组合分析与链类技巧结合',

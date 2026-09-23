@@ -15,6 +15,7 @@ import {
   hintPress,
   holdClock,
   longPressDigit,
+  markComboUsed,
   releaseClock,
   pauseGame,
   pressDigit,
@@ -356,6 +357,7 @@ function Legend({ g }: { g: GameState }) {
 }
 
 function ComboHelper({ g, cell }: { g: GameState; cell: number }) {
+  useEffect(() => markComboUsed(), []);
   const cg = g.puzzle.cages?.find((c) => c.cells.includes(cell));
   if (!cg) return null;
   const placed = cg.cells.map((c) => g.values[c]).filter(Boolean);

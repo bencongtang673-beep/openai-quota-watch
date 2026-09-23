@@ -4,7 +4,7 @@ import { fingerprint } from './fingerprint';
 import { getGeometry, STANDARD_BOXES, type Geometry } from './geometry';
 import { rateIter, type RatingResult } from './human/solver';
 import { SolverState } from './human/state';
-import { generateCages } from './killer-gen';
+import { generateCages, recage } from './killer-gen';
 import { createRng, randomSeed, type Rng } from './rng';
 import { buildModel, countSolutions, randomSolution, type Model } from './solver';
 import { isConnected } from './validate';
@@ -64,13 +64,15 @@ export function* generateIter(req: GenRequest): GenIter {
     const retries = req.mode === 'killer' ? 6 : req.mode === 'samurai' ? 3 : 8;
     for (let t = 0; t < retries && now() < deadline; t++) {
       let cages: Cage[] | undefined;
-      let model: Model = baseModel;
+      let dug: DigResult | null;
       if (req.mode === 'killer') {
-        cages = generateCages(solution, rng, req.level);
-        model = buildModel(g, cages);
-        yield progress('cages');
+        const k = yield* killerIter(g, solution, req.level, rng, deadline, progress);
+        if (!k) continue;
+        cages = k.cages;
+        dug = k;
+      } else {
+        dug = yield* digIter(g, baseModel, solution, req.level, rng, undefined, deadline, progress);
       }
-      const dug = yield* digIter(g, model, solution, req.level, rng, cages, deadline, progress);
       if (!dug) continue;
       const { givens, rating } = dug;
       if (!rating.solved || rating.level !== req.level) continue;
@@ -130,26 +132,6 @@ function* digIter(
   const n = g.size;
   const givens = solution.slice();
   const killer = !!cages;
-  if (killer) {
-    // 纯杀手先整体检查：不唯一则由调用方重新分笼（此处返回 null）；
-    // 1–3 档允许少量给定数，4–5 档默认零给定数，不唯一时补最少给定数。
-    const empty = new Array(n).fill(0);
-    const unique = countSolutions(model, empty, { limit: 2, nodeLimit: 200_000 });
-    if (!unique.aborted && unique.count === 1) {
-      givens.fill(0);
-      if (level >= 4) {
-        const rating = yield* rateGivens(g, givens, cages, 5);
-        return { givens, rating };
-      }
-      // 低档：纯杀手若恰好在目标档以内，直接用；否则从全满开始挖，留少量给定数
-      const pure = yield* rateGivens(g, givens, cages, level);
-      if (pure.solved) return { givens, rating: pure };
-      givens.splice(0, n, ...solution);
-    } else if (level >= 4) {
-      return null;
-    }
-  }
-
   // 2–4 档（非杀手）：先只按唯一性挖到极小，再“卡住就补一个给定数”修到目标档以内（快得多）
   if (!killer && level >= 2 && level <= 4) {
     const res = yield* digThenRepair(g, model, solution, level, rng, deadline, progress);
@@ -183,6 +165,93 @@ function* digIter(
   const rating = yield* rateGivens(g, givens, cages, 5);
   yield progress('rate');
   return { givens, rating };
+}
+
+/** 杀手每档允许补的给定数上限（4–5 档默认纯杀手，确实需要时才补且尽量少） */
+const KILLER_MAX_GIVENS: Record<Level, number> = { 1: 30, 2: 20, 3: 12, 4: 3, 5: 3 };
+
+function* killerIter(
+  g: Geometry,
+  solution: number[],
+  level: Level,
+  rng: Rng,
+  deadline: number,
+  progress: (p: GenProgress['phase']) => GenProgress,
+): Generator<GenProgress, (DigResult & { cages: Cage[] }) | null, void> {
+  const n = g.size;
+  // 1. 分笼并反复“重新分笼”直到纯杀手唯一
+  let cages = generateCages(solution, rng, level);
+  const givens = new Array(n).fill(0);
+  let added = 0;
+  let unique = false;
+  for (let it = 0; it < 40 && now() < deadline; it++) {
+    // 节点上限：大多数笼布局几十到几百个节点就能判定；更难的布局直接放弃、换一套笼
+    const r = countSolutions(buildModel(g, cages), givens, { limit: 2, nodeLimit: 1_500 });
+    yield progress('cages');
+    if (r.aborted) {
+      // 太难证明唯一：低档允许补一个随机给定数再试；高档直接换一套笼
+      if (level > 3 || ++added > KILLER_MAX_GIVENS[level]) break;
+      const open: number[] = [];
+      for (let c = 0; c < n; c++) if (!givens[c]) open.push(c);
+      const c = open[rng.int(open.length)];
+      givens[c] = solution[c];
+      continue;
+    }
+    if (r.count === 1) {
+      unique = true;
+      break;
+    }
+    if (!r.second) break;
+    const nc = recage(cages, solution, r.second, rng);
+    if (nc) {
+      cages = nc;
+      continue;
+    }
+    // 无法再重新分笼时，才补一个给定数（放在两解不同的格上），计入本档给定数上限
+    if (++added > KILLER_MAX_GIVENS[level]) break;
+    const diff: number[] = [];
+    for (let c = 0; c < n; c++) if (r.second[c] !== solution[c]) diff.push(c);
+    const c = diff[rng.int(diff.length)];
+    givens[c] = solution[c];
+  }
+  if (!unique) return null;
+  const model = buildModel(g, cages);
+  // 2. 用 ≤ 目标档技巧解；卡住才补一个正确给定数
+  const s = SolverState.fromValues(g, givens, cages);
+  while (!s.isSolved()) {
+    if (now() > deadline) return null;
+    const it = rateIter(s, { maxLevel: level });
+    let r = it.next();
+    let steps = 0;
+    while (!r.done) {
+      if (++steps % 8 === 0) yield progress('rate');
+      r = it.next();
+    }
+    if (s.isSolved()) break;
+    if (++added > KILLER_MAX_GIVENS[level]) return null;
+    const open: number[] = [];
+    for (let c = 0; c < n; c++) if (!s.val[c]) open.push(c);
+    const c = open[rng.int(open.length)];
+    givens[c] = solution[c];
+    s.place(c, solution[c]);
+  }
+  let rating = yield* rateGivens(g, givens, cages, 5);
+  // 3. 低于目标档时，尝试去掉补的给定数（保持唯一且 ≤ 目标档可解），达到目标档即停
+  if (rating.solved && rating.level !== null && rating.level < level) {
+    for (const c of rng.shuffle(Array.from({ length: n }, (_, i) => i))) {
+      if (!givens[c]) continue;
+      const v = givens[c];
+      givens[c] = 0;
+      const r2 = yield* rateGivens(g, givens, cages, level);
+      if (!r2.solved || countSolutions(model, givens, { limit: 2 }).count !== 1) {
+        givens[c] = v;
+        continue;
+      }
+      if (r2.level === level) break;
+    }
+    rating = yield* rateGivens(g, givens, cages, 5);
+  }
+  return { givens, rating, cages };
 }
 
 function* digThenRepair(

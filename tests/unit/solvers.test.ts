@@ -45,3 +45,31 @@ describe('唯一性求解器（双实现交叉验证）', () => {
     }
   });
 });
+
+describe('杀手：两个求解器在随机笼布局上结果一致（含多解与无解）', () => {
+  it('30 组随机笼（多数不唯一）解数一致', async () => {
+    const { generateCages } = await import('../../src/engine/killer-gen');
+    const g = getGeometry('killer');
+    const rng = createRng(2024);
+    let multi = 0;
+    for (let i = 0; i < 30; i++) {
+      const sol = randomSolution(buildModel(g), rng)!;
+      const cages = generateCages(sol, rng, ((i % 5) + 1) as 1 | 2 | 3 | 4 | 5);
+      const givens = new Array(81).fill(0);
+      // 随机给几个数，让搜索规模可控
+      for (let k = 0; k < 6; k++) {
+        const c = rng.int(81);
+        givens[c] = sol[c];
+      }
+      if (i % 7 === 0) givens[rng.int(81)] = 0;
+      const a = countSolutions(buildModel(g, cages), givens, { limit: 2 }).count;
+      const b = dlxCount(g, givens, cages, 2);
+      expect(a).toBe(b);
+      if (a === 2) multi++;
+      // 破坏笼和 → 两者都应无解
+      const bad = cages.map((c, j) => (j === 0 ? { ...c, sum: c.sum + 1 } : c));
+      expect(countSolutions(buildModel(g, bad), givens, { limit: 2 }).count).toBe(dlxCount(g, givens, bad, 2));
+    }
+    expect(multi).toBeGreaterThan(0);
+  });
+});

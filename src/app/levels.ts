@@ -5,7 +5,7 @@ const AVAILABLE: Record<Mode, Level[]> = {
   classic: [1, 2, 3, 4, 5],
   diagonal: [1, 2, 3, 4, 5],
   jigsaw: [1, 2, 3, 4, 5],
-  killer: [],
+  killer: [1, 2, 3, 4, 5],
   samurai: [],
 };
 

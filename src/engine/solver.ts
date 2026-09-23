@@ -1,7 +1,7 @@
 // 唯一性求解器 A：位掩码 + 约束传播（唯余、摒除、笼和上下界）+ MRV 回溯。
 // 同时用于：数解（找到第 2 个解立即停止）、随机终盘生成（随机候选顺序）。
 import { ALL, DIGITS, LOWEST_DIGIT, POP } from './bits';
-import { allowedDigits } from './combos';
+import { combosFor } from './combos';
 import type { Geometry } from './geometry';
 import type { Cage } from './types';
 import type { Rng } from './rng';
@@ -11,6 +11,8 @@ export interface Model {
   /** 单元两两交集（≥2 格）：[交集格, A 独有格, B 独有格]，用于区块摒除传播 */
   inters: [Int32Array, Int32Array, Int32Array][];
   cages?: Cage[];
+  /** 传播用的和约束：真实笼 + 45 法则内格虚拟笼 */
+  propCages?: Cage[];
   /** 每格的“互斥邻居”（单元邻居 + 同笼格） */
   peers: Int32Array[];
   cellCage: Int16Array;
@@ -18,7 +20,20 @@ export interface Model {
 
 const modelCache = new WeakMap<Geometry, Map<string, Model>>();
 
+const byCages = new WeakMap<Cage[], Model>();
+const noCages = new WeakMap<Geometry, Model>();
+
 export function buildModel(g: Geometry, cages?: Cage[]): Model {
+  // 快速路径：同一个笼数组对象 / 无笼几何直接命中
+  const fast = cages ? byCages.get(cages) : noCages.get(g);
+  if (fast && fast.g === g) return fast;
+  const built = buildModelSlow(g, cages);
+  if (cages) byCages.set(cages, built);
+  else noCages.set(g, built);
+  return built;
+}
+
+function buildModelSlow(g: Geometry, cages?: Cage[]): Model {
   const key = cages ? cages.map((c) => c.cells.join('.') + ':' + c.sum).join('|') : '';
   let m = modelCache.get(g);
   if (!m) {
@@ -51,10 +66,36 @@ export function buildModel(g: Geometry, cages?: Cage[]): Model {
         Int32Array.from(g.units[j].cells.filter((c) => !bs.has(c))),
       ]);
     }
+  // 45 法则派生的虚拟笼：某单元内“伸出去的笼”留在单元里的格（内格）之和已知，且这些格互不相同。
+  // 只用于传播剪枝（与真实笼一样处理“和 + 互不相同”），不改变规则本身。
+  let propCages = cages;
+  if (cages) {
+    const extra: Cage[] = [];
+    const cageOf = new Int16Array(g.size).fill(-1);
+    cages.forEach((cg, i) => cg.cells.forEach((c) => (cageOf[c] = i)));
+    for (const u of g.units) {
+      const set = new Set(u.cells);
+      let full = 0;
+      const innies: number[] = [];
+      const seen = new Set<number>();
+      for (const c of u.cells) {
+        const ci = cageOf[c];
+        if (seen.has(ci)) continue;
+        seen.add(ci);
+        const cg = cages[ci];
+        const inside = cg.cells.filter((x) => set.has(x));
+        if (inside.length === cg.cells.length) full += cg.sum;
+        else innies.push(...inside);
+      }
+      if (innies.length >= 1 && innies.length <= 5) extra.push({ cells: innies, sum: 45 - full });
+    }
+    propCages = [...cages, ...extra];
+  }
   const model: Model = {
     g,
     inters,
     cages,
+    propCages,
     peers: peerSets.map((s) => Int32Array.from([...s].sort((a, b) => a - b))),
     cellCage,
   };
@@ -66,6 +107,8 @@ export function buildModel(g: Geometry, cages?: Cage[]): Model {
 export interface SolveResult {
   count: number;
   solution: number[] | null;
+  /** 找到的第二个解（count ≥ 2 时） */
+  second: number[] | null;
   /** 超出节点上限而中止 */
   aborted: boolean;
   nodes: number;
@@ -80,6 +123,7 @@ export interface SolveOptions {
 class Search {
   count = 0;
   solution: number[] | null = null;
+  second: number[] | null = null;
   nodes = 0;
   aborted = false;
   constructor(
@@ -122,7 +166,7 @@ class Search {
   }
 
   private propagate(cand: Uint16Array, val: Uint8Array): boolean {
-    const { g, cages } = this.model;
+    const { g, propCages: cages } = this.model;
     const n = g.size;
     let changed = true;
     while (changed) {
@@ -206,7 +250,7 @@ class Search {
           }
         }
       }
-      // 杀手笼：和的上下界 + 组合剪枝
+      // 杀手笼：组合可行性剪枝（组合须能放进各格候选）+ 必含数字的笼内唯一位置 + 二格笼精确配对
       if (cages) {
         for (const cg of cages) {
           let used = 0;
@@ -222,13 +266,74 @@ class Search {
             if (s !== 0) return false;
             continue;
           }
-          const allow = allowedDigits(k, s, used);
-          if (!allow) return false;
+          if (s <= 0) return false;
+          let union = 0;
+          let must = ALL;
+          for (const m of combosFor(k, s)) {
+            if (m & used) continue;
+            let cover = 0;
+            let ok = true;
+            for (const c of cg.cells) {
+              if (val[c]) continue;
+              const x = cand[c] & m;
+              if (!x) {
+                ok = false;
+                break;
+              }
+              cover |= x;
+            }
+            if (!ok || cover !== m) continue;
+            union |= m;
+            must &= m;
+          }
+          if (!union) return false;
           for (const c of cg.cells) {
-            if (!val[c] && cand[c] & ~allow) {
-              cand[c] &= allow;
+            if (!val[c] && cand[c] & ~union) {
+              cand[c] &= union;
               if (!cand[c]) return false;
               changed = true;
+            }
+          }
+          // 必含数字只剩一个位置 → 直接填（填了就留到下一轮再处理本笼）
+          let assigned = false;
+          if (must !== ALL && must) {
+            for (const d of DIGITS[must]) {
+              const b = 1 << (d - 1);
+              let pos = -1;
+              let cnt = 0;
+              for (const c of cg.cells) if (!val[c] && cand[c] & b) {
+                cnt++;
+                pos = c;
+              }
+              if (cnt === 0) return false;
+              if (cnt === 1) {
+                if (!this.assign(cand, val, pos, d)) return false;
+                changed = true;
+                assigned = true;
+              }
+            }
+          }
+          if (k === 2 && !assigned) {
+            let a = -1;
+            let b2 = -1;
+            for (const c of cg.cells) if (!val[c]) {
+              if (a < 0) a = c;
+              else b2 = c;
+            }
+            for (const [x, y] of [
+              [a, b2],
+              [b2, a],
+            ]) {
+              let keep = 0;
+              for (const d of DIGITS[cand[x]]) {
+                const e = s - d;
+                if (e >= 1 && e <= 9 && e !== d && cand[y] & (1 << (e - 1))) keep |= 1 << (d - 1);
+              }
+              if (keep !== cand[x]) {
+                cand[x] = keep;
+                if (!keep) return false;
+                changed = true;
+              }
             }
           }
         }
@@ -259,6 +364,7 @@ class Search {
     if (best === -1) {
       this.count++;
       if (!this.solution) this.solution = Array.from(val);
+      else if (!this.second) this.second = Array.from(val);
       return;
     }
     const digits = DIGITS[cand[best]].slice();
@@ -276,7 +382,7 @@ class Search {
 export function countSolutions(model: Model, givens: ArrayLike<number>, opts: SolveOptions = {}): SolveResult {
   const s = new Search(model, opts.limit ?? 2, opts.nodeLimit ?? Infinity, opts.rng);
   s.run(givens);
-  return { count: s.count, solution: s.solution, aborted: s.aborted, nodes: s.nodes };
+  return { count: s.count, solution: s.solution, second: s.second, aborted: s.aborted, nodes: s.nodes };
 }
 
 export function isUnique(model: Model, givens: ArrayLike<number>): boolean {

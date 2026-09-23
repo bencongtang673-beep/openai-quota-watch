@@ -630,6 +630,16 @@ function finishCurrent(result: 'won' | 'lost') {
   emit();
 }
 
+/** 杀手组合助手首次在本局显示时计为使用了辅助 */
+export function markComboUsed() {
+  const g = app.current;
+  if (!g || g.comboUsed || g.status !== 'playing') return;
+  g.comboUsed = true;
+  g.assists++;
+  saveCurrent();
+  emit();
+}
+
 export function setSamuraiGrid(gi: number) {
   const g = app.current;
   if (!g) return;

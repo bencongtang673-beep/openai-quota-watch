@@ -82,14 +82,17 @@ export function emptyCells(g: CurrentGame): number[] {
   return g.values.map((v, i) => (v === 0 ? i : -1)).filter((i) => i >= 0);
 }
 
-/** 找一个与已有数字冲突的错误值（同行已有） */
+/** 找一个与已有数字冲突的错误值（同行、同列或同宫已有；某行可能恰好没有给定数） */
 export function conflictingDigit(g: CurrentGame, cell: number): number {
   const r = Math.floor(cell / 9);
-  for (let c = 0; c < 9; c++) {
-    const v = g.values[r * 9 + c];
-    if (v) return v;
-  }
-  throw new Error('row empty');
+  const col = cell % 9;
+  const peers: number[] = [];
+  for (let i = 0; i < 9; i++) peers.push(r * 9 + i, i * 9 + col);
+  const br = r - (r % 3);
+  const bc = col - (col % 3);
+  for (let i = 0; i < 9; i++) peers.push((br + Math.floor(i / 3)) * 9 + bc + (i % 3));
+  for (const p of peers) if (p !== cell && g.values[p]) return g.values[p];
+  throw new Error('no peer digit');
 }
 
 /** 一个错误但与现有数字不冲突的值（若存在） */
