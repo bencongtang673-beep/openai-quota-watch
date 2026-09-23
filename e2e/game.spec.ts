@@ -30,6 +30,8 @@ test.describe('经典数独：核心操作', () => {
     await longPress(page, 'key-3');
     g = await current(page);
     expect(g.notes[c2] & (1 << 2)).toBeTruthy();
+    // 笔记必须立即画到盘面上（不能等下一次别的操作才刷新）
+    await expect(page.locator('[data-testid=board] text.note')).toHaveCount(1);
     await expect(page.getByTestId('tool-note')).toHaveAttribute('aria-pressed', 'false');
     // 笔记模式开关
     await page.getByTestId('tool-note').click();

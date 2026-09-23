@@ -150,6 +150,7 @@ export function GameScreen() {
               onCellDown={selectCell}
               pixelWidth={boardPx}
               sharedBadges={samurai}
+              rev={`${g.undo.length}:${g.redo.length}`}
               testId="board"
               label={`${MODE_NAMES[g.puzzle.mode]}盘面`}
             />
@@ -397,7 +398,15 @@ function SamuraiThumbs({ g, current }: { g: GameState; current: number }) {
             aria-label={`${SAMURAI_GRID_NAMES[gi]}子盘，已填 ${filled}/81`}
             data-testid={`thumb-${gi}`}
           >
-            <Board g={geo} givens={g.puzzle.givens} values={g.values} subgrid={gi} pixelWidth={60} class="thumb-board" />
+            <Board
+              g={geo}
+              givens={g.puzzle.givens}
+              values={g.values}
+              subgrid={gi}
+              pixelWidth={60}
+              class="thumb-board"
+              rev={`${g.undo.length}:${g.redo.length}`}
+            />
             <div class="tl digits">
               {SAMURAI_GRID_NAMES[gi]} {Math.round((filled / 81) * 100)}%
             </div>

@@ -51,6 +51,8 @@ export interface BoardProps {
   /** 共享宫角标（武士放大视图） */
   sharedBadges?: boolean;
   testId?: string;
+  /** 盘面修订号：values/notes 是原地修改的数组，靠它让 memo 知道内容变了 */
+  rev?: string | number;
 }
 
 const REGION_TINTS = [

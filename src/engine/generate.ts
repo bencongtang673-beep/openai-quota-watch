@@ -93,6 +93,13 @@ export function* generateIter(req: GenRequest): GenIter {
   return null;
 }
 
+/** 有节点上限的唯一性判定：搜索被中止（无法证明唯一）一律视为“不唯一” */
+function uniqueBounded(model: Model, givens: number[]): boolean {
+  // 武士每个节点的传播代价是 9×9 的 ~5 倍，上限相应收紧
+  const r = countSolutions(model, givens, { limit: 2, nodeLimit: model.g.size > 81 ? 1_000 : 20_000 });
+  return !r.aborted && r.count === 1;
+}
+
 interface DigResult {
   givens: number[];
   rating: RatingResult;
@@ -133,7 +140,8 @@ function* digIter(
   const givens = solution.slice();
   const killer = !!cages;
   // 2–4 档（非杀手）：先只按唯一性挖到极小，再“卡住就补一个给定数”修到目标档以内（快得多）
-  if (!killer && level >= 2 && level <= 4) {
+  // 武士（369 格）每挖一格都整盘评级太慢：所有档位都走这条路
+  if (!killer && ((level >= 2 && level <= 4) || g.mode === 'samurai')) {
     const res = yield* digThenRepair(g, model, solution, level, rng, deadline, progress);
     return res;
   }
@@ -153,8 +161,7 @@ function* digIter(
     for (const x of group) done[x] = 1;
     const saved = group.map((x) => givens[x]);
     for (const x of group) givens[x] = 0;
-    const r = countSolutions(model, givens, { limit: 2 });
-    let ok = r.count === 1;
+    let ok = uniqueBounded(model, givens);
     if (ok && constrainLevel) {
       const rating = yield* rateGivens(g, givens, cages, level);
       ok = rating.solved;
@@ -243,7 +250,7 @@ function* killerIter(
       const v = givens[c];
       givens[c] = 0;
       const r2 = yield* rateGivens(g, givens, cages, level);
-      if (!r2.solved || countSolutions(model, givens, { limit: 2 }).count !== 1) {
+      if (!r2.solved || !uniqueBounded(model, givens)) {
         givens[c] = v;
         continue;
       }
@@ -266,18 +273,57 @@ function* digThenRepair(
   const n = g.size;
   const givens = solution.slice();
   const order = rng.shuffle(Array.from({ length: n }, (_, i) => i));
+  // 自适应批量挖空：一次去掉 B 个格，仍唯一就整批接受；否则逐个检查并缩小批量。结果同样是“极小”。
+  let B = n > 81 ? 12 : 4;
+  let i = 0;
   let k = 0;
-  for (const c of order) {
+  while (i < order.length) {
     if (now() > deadline) return null;
-    const v = givens[c];
-    givens[c] = 0;
-    if (countSolutions(model, givens, { limit: 2 }).count !== 1) givens[c] = v;
-    if (++k % 8 === 0) yield progress('dig');
+    const batch = order.slice(i, i + B);
+    i += batch.length;
+    const saved = batch.map((c) => givens[c]);
+    for (const c of batch) givens[c] = 0;
+    if (batch.length > 1 && uniqueBounded(model, givens)) {
+      B = Math.min(n > 81 ? 24 : 8, B * 2);
+    } else {
+      batch.forEach((c, j) => (givens[c] = saved[j]));
+      for (const c of batch) {
+        const v = givens[c];
+        givens[c] = 0;
+        if (!uniqueBounded(model, givens)) givens[c] = v;
+      }
+      B = Math.max(1, Math.floor(B / 2));
+    }
+    if (++k % 4 === 0) yield progress('dig');
   }
+  // 同一个极小盘可以用不同的随机补数方案修复多次（修复比挖空便宜得多）
+  const minimal = givens.slice();
+  let last: DigResult | null = null;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = yield* repairOnce(g, model, minimal.slice(), solution, level, rng, deadline, progress);
+    if (!res) return last;
+    last = res;
+    if (res.rating.solved && res.rating.level === level) return res;
+  }
+  return last;
+}
+
+function* repairOnce(
+  g: Geometry,
+  model: Model,
+  givens: number[],
+  solution: number[],
+  level: Level,
+  rng: Rng,
+  deadline: number,
+  progress: (p: GenProgress['phase']) => GenProgress,
+): Generator<GenProgress, DigResult | null, void> {
+  const n = g.size;
   // 用 ≤ 目标档的技巧解；卡住时随机补一个正确给定数并继续（补的数对之前的推理没有影响）
   const s = SolverState.fromValues(g, givens, undefined);
   let guard = 0;
   while (!s.isSolved() && guard++ < n) {
+    if (now() > deadline) return null;
     const it = rateIter(s, { maxLevel: level });
     let r = it.next();
     let steps = 0;
@@ -295,12 +341,15 @@ function* digThenRepair(
   let rating = yield* rateGivens(g, givens, undefined, 5);
   // 补数后若低于目标档：在“唯一 + 仍可用 ≤目标档技巧解出”的前提下继续去掉给定数，达到目标档即停
   if (rating.solved && rating.level !== null && rating.level < level) {
+    // 最多尝试 20 个给定数；仍达不到就交给上层换一种补法 / 换一次挖空
+    let tries = 0;
     for (const c of rng.shuffle(Array.from({ length: n }, (_, i) => i))) {
       if (now() > deadline) return null;
       if (!givens[c]) continue;
+      if (++tries > 20) break;
       const v = givens[c];
       givens[c] = 0;
-      if (countSolutions(model, givens, { limit: 2 }).count !== 1) {
+      if (!uniqueBounded(model, givens)) {
         givens[c] = v;
         continue;
       }

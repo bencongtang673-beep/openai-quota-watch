@@ -55,7 +55,7 @@ export function OverviewLayer() {
         data-testid="overview-pane"
       >
         <div style={{ transform: `translate(${tf.x}px, ${tf.y}px) scale(${tf.s})`, transformOrigin: '50% 50%' }} data-testid="overview-inner" data-scale={tf.s.toFixed(2)}>
-          <Board g={geo} givens={g.puzzle.givens} values={g.values} notes={g.notes} pixelWidth={360 * tf.s} label="武士总览" />
+          <Board g={geo} givens={g.puzzle.givens} values={g.values} notes={g.notes} pixelWidth={360 * tf.s} label="武士总览" rev={`${g.undo.length}:${g.redo.length}`} />
         </div>
       </div>
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '10px' }}>
