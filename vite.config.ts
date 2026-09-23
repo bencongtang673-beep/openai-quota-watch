@@ -28,5 +28,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    // E2E 用于模拟“发布新版本”：同一代码加不同标签构建出两个版本
+    __BUILD_TAG__: JSON.stringify(process.env.BUILD_TAG ?? ''),
   },
 });

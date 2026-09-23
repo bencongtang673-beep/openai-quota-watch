@@ -29,7 +29,8 @@ test('Service Worker 在子路径注册，scope 正确，断网后可冷启动',
     const swUrl = await page.evaluate(async () => (await navigator.serviceWorker.ready).active!.scriptURL);
     expect(new URL(swUrl).pathname).toBe(`${E2E_BASE}sw.js`);
     await page.reload();
-    await expect(page.getByTestId('sw')).toContainText('已就绪');
+    await expect(page.getByTestId('home')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     // 缓存名带应用前缀，所有预缓存 URL 都在子路径下
     const cached = await page.evaluate(async () => {
       const keys = await caches.keys();
@@ -48,7 +49,7 @@ test('Service Worker 在子路径注册，scope 正确，断网后可冷启动',
     const p2 = await context.newPage();
     await p2.goto(srv.url);
     await expect(p2.locator('h1')).toHaveText('数独');
-    await expect(p2.getByTestId('sw')).toContainText('已就绪');
+    await expect(p2.getByTestId('home')).toBeVisible();
   } finally {
     await context.setOffline(false);
     await srv.stop();

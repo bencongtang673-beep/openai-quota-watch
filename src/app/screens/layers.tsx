@@ -34,7 +34,7 @@ import {
   IconShare,
 } from '../icons';
 import { availableLevels, modeAvailable } from '../levels';
-import { closeLayer, replaceLayer } from '../nav';
+import { closeLayer, closeLayerThen, replaceLayer } from '../nav';
 import { isPoolStopped, POOL_PER_SLOT, resumePoolFilling, stopPoolFilling } from '../pool';
 import { decodeShare, shareText } from '../share';
 import { computeStats, fmtAgo, fmtDate, fmtTime } from '../stats';
@@ -313,27 +313,18 @@ export function MenuLayer() {
   return (
     <Sheet title="更多" testId="menu">
       <div class="menu-list">
-        {item(<IconRedo />, '重做', g?.redo.length ? `可重做 ${g.redo.length} 步` : '没有可重做的操作', () => {
-          closeLayer();
-          setTimeout(doRedo, 30);
-        }, 'menu-redo')}
-        {item(<IconRestart />, '重开本题', '清空填写，可撤销', () => replaceLayerConfirm(confirmRestart), 'menu-restart')}
-        {item(<IconFlag />, '放弃本局', '需要二次确认', () => replaceLayerConfirm(() => confirmAbandon()), 'menu-abandon')}
+        {item(<IconRedo />, '重做', g?.redo.length ? `可重做 ${g.redo.length} 步` : '没有可重做的操作', () => closeLayerThen(doRedo), 'menu-redo')}
+        {item(<IconRestart />, '重开本题', '清空填写，可撤销', () => closeLayerThen(confirmRestart), 'menu-restart')}
+        {item(<IconFlag />, '放弃本局', '需要二次确认', () => closeLayerThen(() => confirmAbandon()), 'menu-abandon')}
         {item(<IconShare />, '分享', '生成分享码发给朋友', () => g && doShare(g.puzzle), 'menu-share')}
         {item(<IconImport />, '导入', '粘贴分享码开新局', () => replaceLayer({ type: 'import' }), 'menu-import')}
         {item(<IconBackup />, '备份', '导出 / 导入全部数据', () => replaceLayer({ type: 'backup' }), 'menu-backup')}
-        {item(<IconMagic />, '自动填候选', '计为使用了辅助', () => {
-          closeLayer();
-          setTimeout(doAutoNotes, 30);
-        }, 'menu-autonotes')}
+        {item(<IconMagic />, '自动填候选', '计为使用了辅助', () => closeLayerThen(doAutoNotes), 'menu-autonotes')}
         {item(
           <IconLock />,
           a.ui.lockMode ? '退出数字锁定' : '数字锁定模式',
           '先选数字，再连续点格子',
-          () => {
-            closeLayer();
-            setTimeout(toggleLockMode, 30);
-          },
+          () => closeLayerThen(toggleLockMode),
           'menu-lock',
         )}
         {g?.puzzle.mode === 'killer' &&
@@ -344,12 +335,6 @@ export function MenuLayer() {
       </div>
     </Sheet>
   );
-}
-
-function replaceLayerConfirm(fn: () => void) {
-  // 关闭菜单后再弹确认框，保证返回键行为正确
-  closeLayer();
-  setTimeout(fn, 60);
 }
 
 async function doShare(p: import('../../engine/types').PuzzleData) {
@@ -572,10 +557,7 @@ export function ConfirmLayer({ layer }: { layer: Extract<Layer, { type: 'confirm
           <button
             class={`btn ${layer.danger ? 'danger' : 'primary'}`}
             data-testid="confirm-ok"
-            onClick={() => {
-              closeLayer();
-              setTimeout(layer.onOk, 30);
-            }}
+            onClick={() => closeLayerThen(layer.onOk)}
           >
             {layer.ok}
           </button>

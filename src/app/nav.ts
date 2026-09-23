@@ -52,6 +52,8 @@ export function installNav(leaveGame: () => void) {
       app.layers = [];
     }
     emit();
+    const w = popWaiters.splice(0);
+    w.forEach((f) => f());
   });
 }
 
@@ -61,9 +63,18 @@ export function openLayer(layer: Layer) {
   emit();
 }
 
+const popWaiters: (() => void)[] = [];
+
 /** 用户点“关闭”：走 history.back()，保持浏览器历史与界面同步 */
 export function closeLayer() {
   if (!app.layers.length) return;
+  history.back();
+}
+
+/** 关闭最上层，并在历史回退真正完成后执行 fn（避免与 popstate 竞争） */
+export function closeLayerThen(fn: () => void) {
+  if (!app.layers.length) return fn();
+  popWaiters.push(fn);
   history.back();
 }
 

@@ -10,9 +10,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:full": "FULL_SAMPLE=1 vitest run tests/batch",
-    "e2e": "npm run build:pages && playwright test",
+    "e2e": "npm run build:e2e && playwright test",
     "e2e:only": "playwright test",
-    "icons": "node scripts/gen-icons.mjs"
+    "icons": "node scripts/gen-icons.mjs",
+    "build:e2e": "npm run build:pages && BUILD_TAG=next BASE_PATH=${BASE_PATH:-/openai-quota-watch/} vite build --outDir dist-next"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

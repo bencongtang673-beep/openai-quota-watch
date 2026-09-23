@@ -8,6 +8,7 @@
 import { features } from './env';
 
 const UPDATED_FLAG = 'sudoku.justUpdated';
+const BUILD_ID = `${__APP_VERSION__}|${__BUILD_TIME__}|${__BUILD_TAG__}`;
 
 type Guard = () => boolean; // 返回 true 表示当前可以安全刷新（不在对局中）
 
@@ -59,7 +60,8 @@ export function tryApplyWaiting(): boolean {
   if (!canReload()) return false;
   reloading = true;
   try {
-    localStorage.setItem(UPDATED_FLAG, '1');
+    // 记下“旧版本”的构建标识；只有换到不同构建的页面才会显示“已更新”
+    localStorage.setItem(UPDATED_FLAG, BUILD_ID);
   } catch {
     /* 隐私模式下 localStorage 可能不可用，忽略 */
   }
@@ -71,8 +73,9 @@ export function tryApplyWaiting(): boolean {
 export function consumeJustUpdated(): boolean {
   try {
     const v = localStorage.getItem(UPDATED_FLAG);
-    if (v) localStorage.removeItem(UPDATED_FLAG);
-    return v === '1';
+    if (!v || v === BUILD_ID) return false;
+    localStorage.removeItem(UPDATED_FLAG);
+    return true;
   } catch {
     return false;
   }

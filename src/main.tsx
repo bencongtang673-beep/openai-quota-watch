@@ -21,4 +21,4 @@ initApp().then(() => {
   installPoolLifecycle();
 });
 // 只有不在对局中时才允许切换到新版本（对局中绝不强制刷新）
-registerServiceWorker(() => app.screen !== 'game');
+registerServiceWorker(() => app.screen !== 'game' && app.layers.length === 0);

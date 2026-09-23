@@ -278,11 +278,15 @@ function NumKey(props: { d: number; left: number; locked: boolean }) {
 function NumPad(props: { counts: number[]; total: number }) {
   const app = useApp();
   const ref = useRef<HTMLDivElement>(null);
-  const [twoRows, setTwoRows] = useState(false);
+  const [rows, setRows] = useState<1 | 2 | 3>(1);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const m = () => setTwoRows(el.getBoundingClientRect().width < 9 * 48 + 8 * 6);
+    // 触控目标 ≥48px：一行放不下 9 个就分两行（5+4），再窄（如 200% 缩放）就 3×3
+    const m = () => {
+      const w = el.getBoundingClientRect().width;
+      setRows(w >= 9 * 48 + 8 * 6 ? 1 : w >= 5 * 48 + 4 * 6 ? 2 : 3);
+    };
     m();
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(m);
@@ -294,7 +298,7 @@ function NumPad(props: { counts: number[]; total: number }) {
   return (
     <div
       ref={ref}
-      class={`numpad ${twoRows ? 'two-rows' : ''} ${app.ui.noteMode ? 'notes-on' : ''}`}
+      class={`numpad ${rows === 2 ? 'two-rows' : rows === 3 ? 'three-rows' : ''} ${app.ui.noteMode ? 'notes-on' : ''}`}
       data-testid="numpad"
       data-no-menu
     >

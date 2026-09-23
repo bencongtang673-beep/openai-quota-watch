@@ -148,7 +148,11 @@ export function Home() {
           )}
         </div>
         <p class="muted small" style={{ textAlign: 'center', marginTop: '20px' }}>
-          全部题目在本机实时生成，完全离线可玩 · v{__APP_VERSION__}
+          全部题目在本机实时生成，完全离线可玩 ·{' '}
+          <span data-testid="app-version">
+            v{__APP_VERSION__}
+            {__BUILD_TAG__ ? '-' + __BUILD_TAG__ : ''}
+          </span>
         </p>
       </div>
     </div>

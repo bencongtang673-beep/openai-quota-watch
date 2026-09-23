@@ -46,8 +46,8 @@ jobs:
       - run: npm ci
       - name: 安装 Playwright 浏览器
         run: npx playwright install --with-deps chromium webkit
-      - name: 子路径构建
-        run: npm run build:pages
+      - name: 子路径构建（当前版本 + 模拟的新版本，用于 SW 更新测试）
+        run: npm run build:e2e
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
       - name: E2E

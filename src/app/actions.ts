@@ -26,7 +26,7 @@ import { DB, type HistoryEntry } from '../platform/db';
 import { features, requestPersistentStorage } from '../platform/env';
 import { requestPuzzle } from '../platform/generator-client';
 import { haptic, setHapticsEnabled } from '../platform/haptics';
-import { closeLayer, enterGameScreen, leaveGameScreen, openLayer, replaceLayer, whenNavSettled } from './nav';
+import { closeLayer, closeLayerThen, enterGameScreen, leaveGameScreen, openLayer, replaceLayer, whenNavSettled } from './nav';
 import { refreshPoolCounts, takeFromPool } from './pool';
 import { mergeSettings, type Settings } from './settings';
 import { app, emit, flushWrites, persist, toast } from './store';
@@ -172,7 +172,8 @@ export function installGameLifecycle() {
 // ---------- 存档 ----------
 export function saveCurrent() {
   const g = app.current;
-  if (!g) return;
+  // 已完成/失败的局已在 finishGame 事务中移入历史，不能再写回残局
+  if (!g || g.status !== 'playing') return;
   lastAutosave = performance.now();
   const snap: GameState = structuredCloneSafe({ ...g, elapsedMs: Math.round(elapsedNow()), updatedAt: Date.now() });
   g.updatedAt = snap.updatedAt;
@@ -579,9 +580,9 @@ async function abandon(g: GameState) {
   app.history = [entry, ...app.history];
   await persist((db) => db.finishGame(g.id, entry));
   if (isCurrent) {
+    // 先解除当前局，避免离开对局时再次写入存档；确认框已关闭（closeLayerThen 保证）
     app.current = null;
-    // 关闭确认框后返回首页
-    setTimeout(() => leaveGameScreen(), 50);
+    leaveGameScreen();
   }
   toast('已放弃');
   emit();
@@ -639,8 +640,7 @@ export function setSamuraiGrid(gi: number) {
 }
 
 export function resultDone() {
-  closeLayer();
-  setTimeout(() => leaveGameScreen(), 60);
+  closeLayerThen(() => leaveGameScreen());
 }
 
 export { closeLayer, openLayer, replaceLayer };
