@@ -31,6 +31,18 @@ export function installNav(leaveGame: () => void) {
     /* 忽略 */
   }
   window.addEventListener('popstate', (e) => {
+    if (pendingBacks > 0) pendingBacks--;
+    try {
+      handlePop(e);
+    } finally {
+      // 我们自己发起的“后退”完成后，再执行期间被推迟的打开操作
+      if (pendingBacks === 0 && deferredOpens.length) deferredOpens.splice(0).forEach((l) => openLayer(l));
+    }
+  });
+}
+
+function handlePop(e: PopStateEvent) {
+  {
     if (pendingEnterGame) {
       // 先把首页上的弹层条目退掉，再压入对局条目
       pendingEnterGame = false;
@@ -54,10 +66,33 @@ export function installNav(leaveGame: () => void) {
     emit();
     const w = popWaiters.splice(0);
     w.forEach((f) => f());
-  });
+  }
 }
 
+/** 由本应用发起、尚未收到 popstate 的后退次数 */
+let pendingBacks = 0;
+const deferredOpens: Layer[] = [];
+
+function back(n = 1) {
+  pendingBacks++;
+  const mine = ++backSeq;
+  if (n === 1) history.back();
+  else history.go(-n);
+  // 保险：若 1 秒内没收到 popstate（例如某些内嵌浏览器历史受限），不能让后续弹层永远被推迟
+  setTimeout(() => {
+    if (mine === backSeq && pendingBacks > 0) {
+      pendingBacks = 0;
+      deferredOpens.splice(0).forEach((l) => openLayer(l));
+    }
+  }, 1000);
+}
+let backSeq = 0;
+
 export function openLayer(layer: Layer) {
+  if (pendingBacks > 0) {
+    deferredOpens.push(layer);
+    return;
+  }
   app.layers = [...app.layers, layer];
   push();
   emit();
@@ -68,14 +103,14 @@ const popWaiters: (() => void)[] = [];
 /** 用户点“关闭”：走 history.back()，保持浏览器历史与界面同步 */
 export function closeLayer() {
   if (!app.layers.length) return;
-  history.back();
+  back();
 }
 
 /** 关闭最上层，并在历史回退真正完成后执行 fn（避免与 popstate 竞争） */
 export function closeLayerThen(fn: () => void) {
   if (!app.layers.length) return fn();
   popWaiters.push(fn);
-  history.back();
+  back();
 }
 
 /** 替换最上层（不增加历史条目） */
@@ -88,7 +123,7 @@ export function replaceLayer(layer: Layer) {
 /** 关闭全部层 */
 export function closeAllLayers() {
   const n = app.layers.length;
-  if (n) history.go(-n);
+  if (n) back(n);
 }
 
 let pendingEnterGame = false;
@@ -109,7 +144,7 @@ export function enterGameScreen() {
     app.screen = 'game';
     app.layers = [];
     emit();
-    history.go(-n);
+    back(n);
     return;
   }
   app.screen = 'game';
@@ -119,7 +154,7 @@ export function enterGameScreen() {
 
 export function leaveGameScreen() {
   if (app.screen !== 'game') return;
-  history.back();
+  back();
 }
 
 export function topLayer(): Layer | undefined {
