@@ -111,7 +111,7 @@ let FINE = false;
 
 function* uniqueBounded(model: Model, givens: number[]): Generator<GenProgress, boolean, void> {
   // 武士每个节点的传播代价是 9×9 的 ~5 倍，上限相应收紧
-  const opts = { limit: 2, nodeLimit: model.g.size > 81 ? 1_000 : 20_000 };
+  const opts = { limit: 2, nodeLimit: model.g.size > 81 ? 200 : 20_000 };
   let r;
   if (FINE) {
     const it = countSolutionsIter(model, givens, opts, model.g.size > 81 ? 4 : 16);
@@ -372,9 +372,12 @@ function* repairOnce(
     if (s.isSolved()) break;
     const open: number[] = [];
     for (let c = 0; c < n; c++) if (!s.val[c]) open.push(c);
-    const c = open[rng.int(open.length)];
-    givens[c] = solution[c];
-    s.place(c, solution[c]);
+    // 大盘面上每次卡住补几格（与剩余空格数成比例），减少整盘“卡住判定”的次数
+    const k = n > 81 ? Math.max(1, Math.floor(open.length / 80)) : 1;
+    for (const c of rng.shuffle(open).slice(0, k)) {
+      givens[c] = solution[c];
+      s.place(c, solution[c]);
+    }
   }
   let rating = yield* rateGivens(g, givens, undefined, 5);
   // 补数后若低于目标档：在“唯一 + 仍可用 ≤目标档技巧解出”的前提下继续去掉给定数，达到目标档即停
@@ -384,7 +387,7 @@ function* repairOnce(
     for (const c of rng.shuffle(Array.from({ length: n }, (_, i) => i))) {
       if (now() > deadline) return null;
       if (!givens[c]) continue;
-      if (++tries > 20) break;
+      if (++tries > (n > 81 ? 8 : 20)) break;
       const v = givens[c];
       givens[c] = 0;
       if (!(yield* uniqueBounded(model, givens))) {

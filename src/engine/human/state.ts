@@ -226,9 +226,17 @@ export class SolverState {
   }
 
   isSolved(): boolean {
-    for (let i = 0; i < this.n; i++) if (!this.val[i]) return false;
+    // 从上次找到的空格处继续扫描（已填格不会再变空），整体为 O(n) 摊还
+    for (let i = this.scanFrom; i < this.n; i++) {
+      if (!this.val[i]) {
+        this.scanFrom = i;
+        return false;
+      }
+    }
+    this.scanFrom = this.n;
     return true;
   }
+  private scanFrom = 0;
 
   /** 候选矛盾：空格无候选，或某单元缺某数字且无处可放 */
   isBroken(): boolean {

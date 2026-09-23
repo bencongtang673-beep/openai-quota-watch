@@ -49,20 +49,30 @@ export function findFullHouse(s: SolverState): Step | null {
 
 export function findHiddenSingle(s: SolverState): Step | null {
   for (const u of unitsInOrder(s.g)) {
-    for (let d = 1; d <= 9; d++) {
-      if (s.placedInUnit(u, d)) continue;
-      const pos = s.positions(u, d);
-      if (pos.length === 1) {
-        const c = pos[0];
-        return {
-          tech: 'hidden_single',
-          placements: [{ cell: c, digit: d }],
-          eliminations: [],
-          highlight: { area: u.cells, units: [u.id], keys: [{ cell: c, digit: d }] },
-          text: `在${un(s.g, u)}中，数字 ${d} 只能放在 ${cn(s.g, c)}（其他格都被同行、同列或同单元里的 ${d} 排除了），所以 ${cn(s.g, c)} = ${d}。`,
-        };
+    // 位掩码统计：once = 至少出现一次的候选，twice = 至少出现两次，placed = 已填数字
+    let once = 0;
+    let twice = 0;
+    let placed = 0;
+    for (const c of u.cells) {
+      if (s.val[c]) placed |= 1 << (s.val[c] - 1);
+      else {
+        const m = s.cand[c];
+        twice |= once & m;
+        once |= m;
       }
     }
+    const single = once & ~twice & ~placed;
+    if (!single) continue;
+    const d = LOWEST_DIGIT[single];
+    const b = 1 << (d - 1);
+    const c = u.cells.find((x) => !s.val[x] && s.cand[x] & b)!;
+    return {
+      tech: 'hidden_single',
+      placements: [{ cell: c, digit: d }],
+      eliminations: [],
+      highlight: { area: u.cells, units: [u.id], keys: [{ cell: c, digit: d }] },
+      text: `在${un(s.g, u)}中，数字 ${d} 只能放在 ${cn(s.g, c)}（其他格都被同行、同列或同单元里的 ${d} 排除了），所以 ${cn(s.g, c)} = ${d}。`,
+    };
   }
   return null;
 }

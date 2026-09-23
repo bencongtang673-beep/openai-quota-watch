@@ -139,12 +139,14 @@ export function* rateIter(s: SolverState, opts: RateOptions = {}): Generator<voi
     level = Math.max(level, info.level);
     score += info.weight;
     techCounts[step.tech] = (techCounts[step.tech] ?? 0) + 1;
-    if (s.isBroken()) {
+    // 只检查本步涉及的格及其互斥格：有空格没有候选即矛盾（整盘单元检查放到结束时做一次）
+    if (stepBroken(s, step)) {
       broken = true;
       break;
     }
     yield;
   }
+  if (!broken && s.isSolved() === false && s.isBroken()) broken = true;
   const solved = s.isSolved() && !broken;
   return {
     solved,
@@ -155,4 +157,14 @@ export function* rateIter(s: SolverState, opts: RateOptions = {}): Generator<voi
     techCounts,
     broken,
   };
+}
+
+function stepBroken(s: SolverState, step: Step): boolean {
+  const check = (c: number) => !s.val[c] && s.cand[c] === 0;
+  for (const e of step.eliminations) if (check(e.cell)) return true;
+  for (const p of step.placements) {
+    const peers = s.model.peers[p.cell];
+    for (let k = 0; k < peers.length; k++) if (check(peers[k])) return true;
+  }
+  return false;
 }
