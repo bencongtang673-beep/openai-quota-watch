@@ -6,7 +6,7 @@ const AVAILABLE: Record<Mode, Level[]> = {
   diagonal: [1, 2, 3, 4, 5],
   jigsaw: [1, 2, 3, 4, 5],
   killer: [1, 2, 3, 4, 5],
-  samurai: [],
+  samurai: [1, 2, 3, 4, 5],
 };
 
 export function availableLevels(mode: Mode): Level[] {

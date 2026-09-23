@@ -14,7 +14,11 @@ export function OverviewLayer() {
   if (!g) return null;
   const geo = getGeometry('samurai');
   const onDown = (e: PointerEvent) => {
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    try {
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* 捕获失败不影响缩放逻辑 */
+    }
     pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     start.current = snapshot();
   };

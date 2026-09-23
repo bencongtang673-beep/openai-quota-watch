@@ -516,6 +516,8 @@ export function hintPress() {
     if (!h) return;
     g.hints++;
     app.ui = { ...ui, hint: h, hintStage: 1 };
+    // 武士：提示区域不在当前放大的子盘时，自动切到包含它最多格子的子盘
+    if (g.puzzle.mode === 'samurai') focusSamuraiOn(g, h.area);
     sound.play('hint');
     saveCurrent();
   } else if (ui.hintStage < 3) {
@@ -628,6 +630,15 @@ function finishCurrent(result: 'won' | 'lost') {
     openLayer({ type: 'result' });
   }
   emit();
+}
+
+function focusSamuraiOn(g: GameState, cells: number[]) {
+  const geo = geometryOf(g.puzzle);
+  const cur = g.grid ?? 2;
+  if (cells.every((c) => geo.cellGrids[c].includes(cur))) return;
+  const score = geo.grids.map((_, gi) => cells.filter((c) => geo.cellGrids[c].includes(gi)).length);
+  const best = score.indexOf(Math.max(...score));
+  if (best >= 0 && best !== cur) g.grid = best;
 }
 
 /** 杀手组合助手首次在本局显示时计为使用了辅助 */
