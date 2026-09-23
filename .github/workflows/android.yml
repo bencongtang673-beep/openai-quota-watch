@@ -30,7 +30,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      - name: 使用 Runner 自带的 Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          ls "$ANDROID_HOME/build-tools" | tail -3
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - run: npm ci
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
       - name: 生成安卓工程
