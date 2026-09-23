@@ -8,6 +8,8 @@ import type { Rng } from './rng';
 
 export interface Model {
   g: Geometry;
+  /** 单元两两交集（≥2 格）：[交集格, A 独有格, B 独有格]，用于区块摒除传播 */
+  inters: [Int32Array, Int32Array, Int32Array][];
   cages?: Cage[];
   /** 每格的“互斥邻居”（单元邻居 + 同笼格） */
   peers: Int32Array[];
@@ -35,8 +37,23 @@ export function buildModel(g: Geometry, cages?: Cage[]): Model {
       }
     });
   }
+  const inters: [Int32Array, Int32Array, Int32Array][] = [];
+  for (let i = 0; i < g.units.length; i++)
+    for (let j = i + 1; j < g.units.length; j++) {
+      const A = g.units[i].cells;
+      const B = new Set(g.units[j].cells);
+      const both = A.filter((c) => B.has(c));
+      if (both.length < 2) continue;
+      const bs = new Set(both);
+      inters.push([
+        Int32Array.from(both),
+        Int32Array.from(A.filter((c) => !bs.has(c))),
+        Int32Array.from(g.units[j].cells.filter((c) => !bs.has(c))),
+      ]);
+    }
   const model: Model = {
     g,
+    inters,
     cages,
     peers: peerSets.map((s) => Int32Array.from([...s].sort((a, b) => a - b))),
     cellCage,
@@ -151,6 +168,42 @@ class Search {
             }
           }
           changed = true;
+        }
+      }
+      // 区块摒除：某数字在单元 A 中只出现在 A∩B，则从 B 的其余格删去（反之亦然）
+      if (!changed) {
+        for (const [both, aOnly, bOnly] of this.model.inters) {
+          let inBoth = 0;
+          for (let k = 0; k < both.length; k++) if (!val[both[k]]) inBoth |= cand[both[k]];
+          if (!inBoth) continue;
+          let inA = 0;
+          for (let k = 0; k < aOnly.length; k++) if (!val[aOnly[k]]) inA |= cand[aOnly[k]];
+          let inB = 0;
+          for (let k = 0; k < bOnly.length; k++) if (!val[bOnly[k]]) inB |= cand[bOnly[k]];
+          const lockedA = inBoth & ~inA; // 在 A 中只能在交集 → B 的其余格删去
+          const lockedB = inBoth & ~inB;
+          const rmB = lockedA & inB;
+          const rmA = lockedB & inA;
+          if (rmB) {
+            for (let k = 0; k < bOnly.length; k++) {
+              const c = bOnly[k];
+              if (!val[c] && cand[c] & rmB) {
+                cand[c] &= ~rmB;
+                if (!cand[c]) return false;
+              }
+            }
+            changed = true;
+          }
+          if (rmA) {
+            for (let k = 0; k < aOnly.length; k++) {
+              const c = aOnly[k];
+              if (!val[c] && cand[c] & rmA) {
+                cand[c] &= ~rmA;
+                if (!cand[c]) return false;
+              }
+            }
+            changed = true;
+          }
         }
       }
       // 杀手笼：和的上下界 + 组合剪枝

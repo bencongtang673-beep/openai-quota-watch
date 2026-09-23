@@ -3,8 +3,8 @@ import type { Level, Mode } from '../engine/types';
 
 const AVAILABLE: Record<Mode, Level[]> = {
   classic: [1, 2, 3, 4, 5],
-  diagonal: [],
-  jigsaw: [],
+  diagonal: [1, 2, 3, 4, 5],
+  jigsaw: [1, 2, 3, 4, 5],
   killer: [],
   samurai: [],
 };

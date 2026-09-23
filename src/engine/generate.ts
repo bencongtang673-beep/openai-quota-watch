@@ -56,7 +56,7 @@ export function* generateIter(req: GenRequest): GenIter {
     const g = getGeometry(req.mode, regions);
     const baseModel = buildModel(g);
     // 2. 终盘
-    const solution = randomSolution(baseModel, rng, req.mode === 'jigsaw' ? 20_000 : 500_000);
+    const solution = randomSolution(baseModel, rng, req.mode === 'jigsaw' ? 1_500 : 500_000);
     yield progress('solution');
     if (!solution) continue; // 锯齿布局限时内无终盘 → 换布局
 
@@ -223,7 +223,27 @@ function* digThenRepair(
     givens[c] = solution[c];
     s.place(c, solution[c]);
   }
-  const rating = yield* rateGivens(g, givens, undefined, 5);
+  let rating = yield* rateGivens(g, givens, undefined, 5);
+  // 补数后若低于目标档：在“唯一 + 仍可用 ≤目标档技巧解出”的前提下继续去掉给定数，达到目标档即停
+  if (rating.solved && rating.level !== null && rating.level < level) {
+    for (const c of rng.shuffle(Array.from({ length: n }, (_, i) => i))) {
+      if (now() > deadline) return null;
+      if (!givens[c]) continue;
+      const v = givens[c];
+      givens[c] = 0;
+      if (countSolutions(model, givens, { limit: 2 }).count !== 1) {
+        givens[c] = v;
+        continue;
+      }
+      const r2 = yield* rateGivens(g, givens, undefined, level);
+      if (!r2.solved) {
+        givens[c] = v;
+        continue;
+      }
+      if (r2.level === level) break;
+    }
+    rating = yield* rateGivens(g, givens, undefined, 5);
+  }
   yield progress('rate');
   return { givens, rating };
 }
