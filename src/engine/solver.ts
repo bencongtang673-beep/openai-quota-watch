@@ -342,6 +342,58 @@ class Search {
     return true;
   }
 
+  /** 可分片的搜索：每 slice 个节点 yield 一次（主线程降级模式使用） */
+  *runIter(givens: ArrayLike<number>, slice: number): Generator<void, void, void> {
+    const n = this.model.g.size;
+    const cand = new Uint16Array(n).fill(ALL);
+    const val = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const d = givens[i];
+      if (d) {
+        if (!(cand[i] & (1 << (d - 1)))) return;
+        if (!this.assign(cand, val, i, d)) return;
+      }
+    }
+    if (!this.propagate(cand, val)) return;
+    yield* this.dfsIter(cand, val, slice);
+  }
+
+  private *dfsIter(cand: Uint16Array, val: Uint8Array, slice: number): Generator<void, void, void> {
+    if (this.count >= this.limit || this.aborted) return;
+    if (++this.nodes > this.nodeLimit) {
+      this.aborted = true;
+      return;
+    }
+    if (this.nodes % slice === 0) yield;
+    const n = this.model.g.size;
+    let best = -1;
+    let bestPop = 10;
+    for (let i = 0; i < n; i++) {
+      if (!val[i]) {
+        const p = POP[cand[i]];
+        if (p < bestPop) {
+          bestPop = p;
+          best = i;
+          if (p === 2) break;
+        }
+      }
+    }
+    if (best === -1) {
+      this.count++;
+      if (!this.solution) this.solution = Array.from(val);
+      else if (!this.second) this.second = Array.from(val);
+      return;
+    }
+    const digits = DIGITS[cand[best]].slice();
+    if (this.rng) this.rng.shuffle(digits);
+    for (const d of digits) {
+      const c2 = cand.slice();
+      const v2 = val.slice();
+      if (this.assign(c2, v2, best, d) && this.propagate(c2, v2)) yield* this.dfsIter(c2, v2, slice);
+      if (this.count >= this.limit || this.aborted) return;
+    }
+  }
+
   private dfs(cand: Uint16Array, val: Uint8Array): void {
     if (this.count >= this.limit || this.aborted) return;
     if (++this.nodes > this.nodeLimit) {
@@ -376,6 +428,18 @@ class Search {
       if (this.count >= this.limit || this.aborted) return;
     }
   }
+}
+
+/** 可分片版本的数解：每 slice 个搜索节点让出一次 */
+export function* countSolutionsIter(
+  model: Model,
+  givens: ArrayLike<number>,
+  opts: SolveOptions = {},
+  slice = 8,
+): Generator<void, SolveResult, void> {
+  const s = new Search(model, opts.limit ?? 2, opts.nodeLimit ?? Infinity, opts.rng);
+  yield* s.runIter(givens, slice);
+  return { count: s.count, solution: s.solution, second: s.second, aborted: s.aborted, nodes: s.nodes };
 }
 
 /** 数解，找到 limit 个解立即停止（默认 2：足以判断唯一性）。 */

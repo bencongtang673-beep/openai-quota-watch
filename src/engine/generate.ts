@@ -6,7 +6,7 @@ import { rateIter, type RatingResult } from './human/solver';
 import { SolverState } from './human/state';
 import { generateCages, recage } from './killer-gen';
 import { createRng, randomSeed, type Rng } from './rng';
-import { buildModel, countSolutions, randomSolution, type Model } from './solver';
+import { buildModel, countSolutions, countSolutionsIter, randomSolution, type Model } from './solver';
 import { isConnected } from './validate';
 import type { Cage, Level, Mode, PuzzleData } from './types';
 
@@ -18,6 +18,8 @@ export interface GenRequest {
   exclude?: Set<string>;
   /** 超时（毫秒）：超时返回 null，绝不降档冒充 */
   timeLimitMs?: number;
+  /** 主线程降级模式：唯一性搜索也按节点分片让出（Worker 中不需要，保持最快路径） */
+  fineSlices?: boolean;
 }
 
 export interface GenProgress {
@@ -39,6 +41,7 @@ export function generate(req: GenRequest): PuzzleData | null {
 }
 
 export function* generateIter(req: GenRequest): GenIter {
+  FINE = !!req.fineSlices;
   const rng = createRng(req.seed ?? randomSeed());
   const start = now();
   const deadline = start + (req.timeLimitMs ?? Infinity);
@@ -56,7 +59,17 @@ export function* generateIter(req: GenRequest): GenIter {
     const g = getGeometry(req.mode, regions);
     const baseModel = buildModel(g);
     // 2. 终盘
-    const solution = randomSolution(baseModel, rng, req.mode === 'jigsaw' ? 1_500 : 500_000);
+    const solLimit = req.mode === 'jigsaw' ? 1_500 : 500_000;
+    let solution: number[] | null;
+    if (FINE) {
+      const it = countSolutionsIter(baseModel, new Array(g.size).fill(0), { limit: 1, rng, nodeLimit: solLimit }, 4);
+      let x = it.next();
+      while (!x.done) {
+        yield progress('solution');
+        x = it.next();
+      }
+      solution = x.value.solution;
+    } else solution = randomSolution(baseModel, rng, solLimit);
     yield progress('solution');
     if (!solution) continue; // 锯齿布局限时内无终盘 → 换布局
 
@@ -94,9 +107,23 @@ export function* generateIter(req: GenRequest): GenIter {
 }
 
 /** 有节点上限的唯一性判定：搜索被中止（无法证明唯一）一律视为“不唯一” */
-function uniqueBounded(model: Model, givens: number[]): boolean {
+let FINE = false;
+
+function* uniqueBounded(model: Model, givens: number[]): Generator<GenProgress, boolean, void> {
   // 武士每个节点的传播代价是 9×9 的 ~5 倍，上限相应收紧
-  const r = countSolutions(model, givens, { limit: 2, nodeLimit: model.g.size > 81 ? 1_000 : 20_000 });
+  const opts = { limit: 2, nodeLimit: model.g.size > 81 ? 1_000 : 20_000 };
+  let r;
+  if (FINE) {
+    const it = countSolutionsIter(model, givens, opts, model.g.size > 81 ? 4 : 16);
+    for (;;) {
+      const x = it.next();
+      if (x.done) {
+        r = x.value;
+        break;
+      }
+      yield { attempts: 0, phase: 'dig', elapsedMs: 0 };
+    }
+  } else r = countSolutions(model, givens, opts);
   return !r.aborted && r.count === 1;
 }
 
@@ -114,11 +141,10 @@ function* rateGivens(
 ): Generator<GenProgress, RatingResult, void> {
   const s = SolverState.fromValues(g, givens, cages);
   const it = rateIter(s, { maxLevel });
-  let k = 0;
   for (;;) {
     const r = it.next();
     if (r.done) return r.value;
-    if (++k % 8 === 0) yield { attempts: 0, phase: 'rate', elapsedMs: 0 };
+    yield { attempts: 0, phase: 'rate', elapsedMs: 0 };
   }
 }
 
@@ -161,13 +187,14 @@ function* digIter(
     for (const x of group) done[x] = 1;
     const saved = group.map((x) => givens[x]);
     for (const x of group) givens[x] = 0;
-    let ok = uniqueBounded(model, givens);
+    let ok = (yield* uniqueBounded(model, givens));
     if (ok && constrainLevel) {
       const rating = yield* rateGivens(g, givens, cages, level);
       ok = rating.solved;
     }
     if (!ok) group.forEach((x, i) => (givens[x] = saved[i]));
-    if (++yieldCounter % 2 === 0) yield progress('dig');
+    yieldCounter++;
+    yield progress('dig');
   }
   const rating = yield* rateGivens(g, givens, cages, 5);
   yield progress('rate');
@@ -193,7 +220,16 @@ function* killerIter(
   let unique = false;
   for (let it = 0; it < 40 && now() < deadline; it++) {
     // 节点上限：大多数笼布局几十到几百个节点就能判定；更难的布局直接放弃、换一套笼
-    const r = countSolutions(buildModel(g, cages), givens, { limit: 2, nodeLimit: 1_500 });
+    let r;
+    if (FINE) {
+      const it = countSolutionsIter(buildModel(g, cages), givens, { limit: 2, nodeLimit: 1_500 }, 8);
+      let x = it.next();
+      while (!x.done) {
+        yield progress('cages');
+        x = it.next();
+      }
+      r = x.value;
+    } else r = countSolutions(buildModel(g, cages), givens, { limit: 2, nodeLimit: 1_500 });
     yield progress('cages');
     if (r.aborted) {
       // 太难证明唯一：低档允许补一个随机给定数再试；高档直接换一套笼
@@ -231,7 +267,8 @@ function* killerIter(
     let r = it.next();
     let steps = 0;
     while (!r.done) {
-      if (++steps % 8 === 0) yield progress('rate');
+      steps++;
+      yield progress('rate');
       r = it.next();
     }
     if (s.isSolved()) break;
@@ -250,7 +287,7 @@ function* killerIter(
       const v = givens[c];
       givens[c] = 0;
       const r2 = yield* rateGivens(g, givens, cages, level);
-      if (!r2.solved || !uniqueBounded(model, givens)) {
+      if (!r2.solved || !(yield* uniqueBounded(model, givens))) {
         givens[c] = v;
         continue;
       }
@@ -276,25 +313,25 @@ function* digThenRepair(
   // 自适应批量挖空：一次去掉 B 个格，仍唯一就整批接受；否则逐个检查并缩小批量。结果同样是“极小”。
   let B = n > 81 ? 12 : 4;
   let i = 0;
-  let k = 0;
   while (i < order.length) {
     if (now() > deadline) return null;
     const batch = order.slice(i, i + B);
     i += batch.length;
     const saved = batch.map((c) => givens[c]);
     for (const c of batch) givens[c] = 0;
-    if (batch.length > 1 && uniqueBounded(model, givens)) {
+    if (batch.length > 1 && (yield* uniqueBounded(model, givens))) {
       B = Math.min(n > 81 ? 24 : 8, B * 2);
     } else {
       batch.forEach((c, j) => (givens[c] = saved[j]));
       for (const c of batch) {
         const v = givens[c];
         givens[c] = 0;
-        if (!uniqueBounded(model, givens)) givens[c] = v;
+        if (!(yield* uniqueBounded(model, givens))) givens[c] = v;
+        yield progress('dig');
       }
       B = Math.max(1, Math.floor(B / 2));
     }
-    if (++k % 4 === 0) yield progress('dig');
+    yield progress('dig');
   }
   // 同一个极小盘可以用不同的随机补数方案修复多次（修复比挖空便宜得多）
   const minimal = givens.slice();
@@ -328,7 +365,8 @@ function* repairOnce(
     let r = it.next();
     let steps = 0;
     while (!r.done) {
-      if (++steps % 16 === 0) yield progress('rate');
+      steps++;
+      yield progress('rate');
       r = it.next();
     }
     if (s.isSolved()) break;
@@ -349,7 +387,7 @@ function* repairOnce(
       if (++tries > 20) break;
       const v = givens[c];
       givens[c] = 0;
-      if (!uniqueBounded(model, givens)) {
+      if (!(yield* uniqueBounded(model, givens))) {
         givens[c] = v;
         continue;
       }

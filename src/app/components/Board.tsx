@@ -401,7 +401,7 @@ export const Board = memo(function Board(p: BoardProps) {
       viewBox={`-2 -2 ${view.W * U + 4} ${view.H * U + 4}`}
       onPointerDown={onPointerDown}
       data-no-menu
-      role="grid"
+      role="img"
       aria-label={p.label ?? '数独盘面'}
       data-testid={p.testId}
     >

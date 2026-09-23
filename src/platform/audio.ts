@@ -77,6 +77,15 @@ class SoundEngine {
     return !!this.ctx;
   }
 
+  /** 当前同时发声数（测试用） */
+  get activeVoices() {
+    return this.ctx ? this.voices.filter((v) => v.end > this.ctx!.currentTime).length : 0;
+  }
+
+  get state() {
+    return this.ctx?.state ?? 'none';
+  }
+
   play(name: SoundName, arg = 0) {
     if (!this.enabled || this.volume <= 0) return;
     const ctx = this.ctx;
@@ -144,6 +153,10 @@ class SoundEngine {
 
   private track(nodes: OscillatorNode[], gain: GainNode, end: number) {
     for (const o of nodes) o.stop(end + 0.02);
+    // 每个发声都受上限约束（一个音效可能包含多个发声），超出时淡出最早的
+    const now = this.ctx!.currentTime;
+    this.voices = this.voices.filter((v) => v.end > now);
+    while (this.voices.length >= MAX_VOICES) this.voices.shift()!.stop(now);
     this.voices.push({
       end,
       stop: (now) => {

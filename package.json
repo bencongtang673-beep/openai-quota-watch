@@ -16,6 +16,7 @@
     "build:e2e": "npm run build:pages && BUILD_TAG=next BASE_PATH=${BASE_PATH:-/openai-quota-watch/} vite build --outDir dist-next"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@preact/preset-vite": "^2.10.6",
     "@types/node": "^26.6.2",

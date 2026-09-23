@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { DIGITS } from '../../engine/bits';
 import { combosFor } from '../../engine/combos';
-import { getGeometry, SAMURAI_GRID_NAMES } from '../../engine/geometry';
+import { cellName, getGeometry, SAMURAI_GRID_NAMES } from '../../engine/geometry';
 import { TECH_BY_ID } from '../../engine/human/state';
 import { LEVEL_NAMES, MODE_NAMES } from '../../engine/types';
 import { conflictCells, digitCounts, digitTotal, geometryOf, progressPct, wrongCells, type GameState } from '../../game/game';
@@ -152,7 +152,7 @@ export function GameScreen() {
               sharedBadges={samurai}
               rev={`${g.undo.length}:${g.redo.length}`}
               testId="board"
-              label={`${MODE_NAMES[g.puzzle.mode]}盘面`}
+              label={boardLabel(g, sel)}
             />
             {ui.paused && (
               <div class="pause-cover" data-testid="pause-cover">
@@ -222,6 +222,15 @@ export function GameScreen() {
       </div>
     </div>
   );
+}
+
+function boardLabel(g: GameState, sel: number | null): string {
+  const geo = geometryOf(g.puzzle);
+  const base = `${MODE_NAMES[g.puzzle.mode]}盘面，进度 ${progressPct(g)}%`;
+  if (sel == null) return base;
+  const v = g.values[sel];
+  const what = v ? `${g.puzzle.givens[sel] ? '给定数' : '已填'} ${v}` : g.notes[sel] ? `笔记 ${DIGITS[g.notes[sel]].join(' ')}` : '空格';
+  return `${base}。已选中 ${cellName(geo, sel)}：${what}`;
 }
 
 function Toolbar() {

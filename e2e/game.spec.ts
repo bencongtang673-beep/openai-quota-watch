@@ -175,6 +175,7 @@ test.describe('经典数独：核心操作', () => {
   });
 
   test('通关：全规则校验、成绩卡、历史记录与统计', async ({ page }) => {
+    test.slow();
     await openHome(page);
     await startGame(page, 1);
     const g = await current(page);

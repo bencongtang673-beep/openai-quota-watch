@@ -57,7 +57,7 @@ function viaWorker(req: GenRequest, onProgress?: (p: GenProgress) => void): GenH
 }
 
 function viaMainThread(req: GenRequest, onProgress?: (p: GenProgress) => void): GenHandle {
-  const it = generateIter(req);
+  const it = generateIter({ ...req, fineSlices: true });
   let cancelled = false;
   let settle: (v: PuzzleData | null) => void = () => {};
   let fail: (e: unknown) => void = () => {};

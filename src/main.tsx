@@ -35,3 +35,12 @@ import type { Level, Mode } from './engine/types';
   }
   return times;
 };
+
+// 测试钩子：强制主线程分片出题（模拟 Worker 不可用）、音效引擎
+import { requestPuzzle } from './platform/generator-client';
+import { sound } from './platform/audio';
+(window as unknown as { __sudokuGenMain: unknown }).__sudokuGenMain = (mode: Mode, level: Level) =>
+  requestPuzzle({ mode, level, timeLimitMs: 60_000 }, undefined, true).promise;
+(window as unknown as { __sudokuSound: unknown }).__sudokuSound = sound;
+import { stopPoolFilling } from './app/pool';
+(window as unknown as { __sudokuStopPool: unknown }).__sudokuStopPool = stopPoolFilling;
