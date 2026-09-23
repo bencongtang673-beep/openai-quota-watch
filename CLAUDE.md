@@ -35,4 +35,6 @@ npm run e2e                # 子路径构建 + Playwright（iPhone/WebKit、Pixe
   变通：`dockerd &` 后 `docker pull mcr.microsoft.com/playwright:v1.63.0-noble`，
   再 `docker cp <容器>:/ms-playwright/webkit-2359 /opt/pw-browsers/`（chromium-1243 同理）。
 - WebKit 的 `context.setOffline` 会拦截 SW 响应，离线测试用 `e2e/server.ts` 的“关服务器”方式模拟断网。
-- `pkill -f serve.mjs` 会把自己所在的 shell 也杀掉，别这么用。
+- `pkill -f <含命令行文字的模式>` 会把自己所在的 shell 也杀掉，别这么用。
+- 计时类 E2E（perf / fallback-audio）在独立的 *-timing 项目里、功能测试之后串行运行。
+- 安卓 APK：`scripts/android-prepare.sh` + `.github/workflows/android.yml`（本机无 Android SDK，只能在 Actions 上编译）。

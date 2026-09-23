@@ -10,7 +10,7 @@
 | M4 杀手数独 | ✅ 完成 |
 | M5 武士数独 | ✅ 完成 |
 | M6 打磨与交付 | ✅ 完成（自检报告见下） |
-| M7 安卓 APK（可选） | 未开始 |
+| M7 安卓 APK（可选） | ✅ 工作流完成（调试版已在 GitHub 上构建成功；正式签名需老大添加 Secret） |
 
 ## 引擎要点（M1）
 - `src/engine/rng.ts` xoshiro128**，种子来自 crypto.getRandomValues。
@@ -147,10 +147,24 @@
 1. 出题耗时尾部：见上，对角线 3 档、杀手 3–4 档、武士 2–3 档在 4 倍降速下偶有超出目标；中位数都达标，依赖题池兜底。
 2. 主线程降级模式偶有单步 >16ms（最长约 120ms）；实际目标设备都支持 Worker，此模式基本不会启用。
 3. 隐性四数组、水母在随机题中几乎从不成为“下一步”（更简单技巧总能先解决），说明页的这两个示例是在真实盘面上直接演示该技巧（已注明）。
-4. 快速连续“返回 + 点按钮”（<50ms）可能让新弹层被关闭；正常操作不会出现。
+4. 用户按系统返回键后 <50ms 内立刻点开新弹层，极少数情况下新弹层会被关掉（App 自己发起的返回已修复）。
 5. 音效、震动、真实安装、系统静音键、国产浏览器行为无法在云端自动化验证，需要真机检查（docs/CHECKLIST.md）。
 6. 本机 WebKit 从 docker 镜像提取；CI 上直接安装（CI 全绿）。
 
+## M7 安卓 APK（2026-09-23）
+- `.github/workflows/android.yml`：Capacitor 8 生成安卓工程（`scripts/android-prepare.sh`，不入库）→ 有签名 Secret 则构建正式版并用固定密钥签名、发布到 Releases；没有则只出调试版 APK（Actions 产物）。
+  PR 上的调试构建已在 GitHub Actions 实跑成功（run #3，约 3.5 分钟）。
+- `.github/workflows/android-keystore.yml`：一次性在云端生成签名密钥并直接写入仓库 Secrets（不打印），已有密钥时拒绝覆盖；同时产出用备份口令加密的密钥备份。**此工作流需要老大先添加令牌，我无法替你端到端运行。**
+- APK 内：不注册 SW、不显示安装引导、备份改为文本码（WebView 不支持下载文件）；有 E2E 模拟验证。appId `io.github.bencongtang673beep.sudoku`（发布后不能改）。
+
+### 老大在手机上开启正式版 APK 的步骤（用手机浏览器打开 github.com，切“桌面版网站”更方便）
+1. 头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token：
+   Repository access 选 Only select repositories → openai-quota-watch；Permissions → Repository permissions → **Secrets: Read and write**；生成后复制令牌。
+2. 打开仓库 → Settings → Secrets and variables → Actions → New repository secret，添加两项：
+   `GH_ADMIN_TOKEN` = 刚才的令牌；`KEY_BACKUP_PASSPHRASE` = 你自己记得住的口令（至少 8 位）。
+3. （PR 合并到 main 之后）仓库 → Actions → 「生成安卓签名密钥（只需运行一次）」→ Run workflow。成功后下载产物 `keystore-backup-encrypted` 存到网盘/iCloud，口令记牢——**丢了密钥以后就不能覆盖升级**。
+4. Actions → 「安卓 APK」→ Run workflow → 完成后在仓库 Releases 下载 `sudoku.apk` 安装。以后每次想出新版就再运行一次（或推送 v 开头的标签）。
+5. 密钥生成完即可删除 `GH_ADMIN_TOKEN` Secret 并在 GitHub 里撤销该令牌。
+
 ## 下一步
 - 等老大在手机上按 docs/CHECKLIST.md 验收；有问题直接说现象，我来修。
-- M7（可选）：Capacitor 打包安卓 APK 的 GitHub Actions 工作流（需要老大在 GitHub 上添加签名密钥 Secret）。
