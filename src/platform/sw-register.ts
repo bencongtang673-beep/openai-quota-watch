@@ -8,6 +8,7 @@
 import { features, isNativeApp } from './env';
 
 const UPDATED_FLAG = 'sudoku.justUpdated';
+const LAST_BUILD = 'sudoku.lastBuild';
 const BUILD_ID = `${__APP_VERSION__}|${__BUILD_TIME__}|${__BUILD_TAG__}`;
 
 type Guard = () => boolean; // 返回 true 表示当前可以安全刷新（不在对局中）
@@ -70,13 +71,17 @@ export function tryApplyWaiting(): boolean {
   return true;
 }
 
-/** 读取并清除“刚刚更新过”的标记，用于显示一次“已更新”轻提示。 */
+/**
+ * 是否刚换到新版本（用于显示一次“已更新”轻提示）。
+ * 不依赖由谁激活了新 Service Worker（有的浏览器在刷新时会自行激活）：
+ * 记录上次运行的构建标识，与当前构建不同即视为已更新。首次安装不提示。
+ */
 export function consumeJustUpdated(): boolean {
   try {
-    const v = localStorage.getItem(UPDATED_FLAG);
-    if (!v || v === BUILD_ID) return false;
+    const last = localStorage.getItem(LAST_BUILD);
+    localStorage.setItem(LAST_BUILD, BUILD_ID);
     localStorage.removeItem(UPDATED_FLAG);
-    return true;
+    return !!last && last !== BUILD_ID;
   } catch {
     return false;
   }
