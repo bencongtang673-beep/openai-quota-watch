@@ -120,3 +120,17 @@ test('200% 页面缩放（系统 / 浏览器字体放大）下布局不崩', asy
     await page.goBack();
   }
 });
+
+test('全屏弹层（说明页）内容可滚动', async ({ page }) => {
+  await openHome(page);
+  await page.getByTestId('open-help').click();
+  await page.getByTestId('help-tab-techs').click();
+  const m = await page.evaluate(() => {
+    const e = document.querySelector('[data-testid=help] .fp-body') as HTMLElement;
+    return { sh: e.scrollHeight, ch: e.clientHeight, vh: window.innerHeight };
+  });
+  expect(m.ch).toBeLessThanOrEqual(m.vh);
+  expect(m.sh).toBeGreaterThan(m.ch);
+  await page.getByTestId('tech-aic-stage-2').click();
+  await expect(page.getByTestId('tech-aic-stage-2')).toHaveClass(/on/);
+});

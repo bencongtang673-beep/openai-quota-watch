@@ -150,6 +150,11 @@ function* digIter(
     }
   }
 
+  // 2–4 档（非杀手）：先只按唯一性挖到极小，再“卡住就补一个给定数”修到目标档以内（快得多）
+  if (!killer && level >= 2 && level <= 4) {
+    const res = yield* digThenRepair(g, model, solution, level, rng, deadline, progress);
+    return res;
+  }
   const symmetric = level <= 3 && !killer && g.width === 9;
   const order = rng.shuffle(Array.from({ length: n }, (_, i) => i));
   const done = new Uint8Array(n);
@@ -176,6 +181,49 @@ function* digIter(
     if (++yieldCounter % 2 === 0) yield progress('dig');
   }
   const rating = yield* rateGivens(g, givens, cages, 5);
+  yield progress('rate');
+  return { givens, rating };
+}
+
+function* digThenRepair(
+  g: Geometry,
+  model: Model,
+  solution: number[],
+  level: Level,
+  rng: Rng,
+  deadline: number,
+  progress: (p: GenProgress['phase']) => GenProgress,
+): Generator<GenProgress, DigResult | null, void> {
+  const n = g.size;
+  const givens = solution.slice();
+  const order = rng.shuffle(Array.from({ length: n }, (_, i) => i));
+  let k = 0;
+  for (const c of order) {
+    if (now() > deadline) return null;
+    const v = givens[c];
+    givens[c] = 0;
+    if (countSolutions(model, givens, { limit: 2 }).count !== 1) givens[c] = v;
+    if (++k % 8 === 0) yield progress('dig');
+  }
+  // 用 ≤ 目标档的技巧解；卡住时随机补一个正确给定数并继续（补的数对之前的推理没有影响）
+  const s = SolverState.fromValues(g, givens, undefined);
+  let guard = 0;
+  while (!s.isSolved() && guard++ < n) {
+    const it = rateIter(s, { maxLevel: level });
+    let r = it.next();
+    let steps = 0;
+    while (!r.done) {
+      if (++steps % 16 === 0) yield progress('rate');
+      r = it.next();
+    }
+    if (s.isSolved()) break;
+    const open: number[] = [];
+    for (let c = 0; c < n; c++) if (!s.val[c]) open.push(c);
+    const c = open[rng.int(open.length)];
+    givens[c] = solution[c];
+    s.place(c, solution[c]);
+  }
+  const rating = yield* rateGivens(g, givens, undefined, 5);
   yield progress('rate');
   return { givens, rating };
 }

@@ -22,3 +22,16 @@ initApp().then(() => {
 });
 // 只有不在对局中时才允许切换到新版本（对局中绝不强制刷新）
 registerServiceWorker(() => app.screen !== 'game' && app.layers.length === 0);
+
+// 性能基准钩子（E2E 在 4 倍 CPU 降速下调用，用于记录出题耗时；界面不可见）
+import { generate } from './engine/generate';
+import type { Level, Mode } from './engine/types';
+(window as unknown as { __sudokuBench: unknown }).__sudokuBench = (mode: Mode, level: Level, n: number, seed: number) => {
+  const times: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = performance.now();
+    const p = generate({ mode, level, seed: seed + i * 7919 });
+    times.push(p ? performance.now() - t : -1);
+  }
+  return times;
+};

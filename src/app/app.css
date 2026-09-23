@@ -1340,3 +1340,11 @@ a {
   top: 50%;
   transform: translate(-50%, -50%);
 }
+/* WebKit：弹层内的 flex 子项必须允许收缩，否则内容把容器撑开导致无法滚动 */
+.fullpage {
+  min-height: 0;
+  overflow: hidden;
+}
+.layer {
+  min-height: 0;
+}
