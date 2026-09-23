@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 类型检查 + 单元测试 + 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 单元测试（CI 小样本）
+        run: npm test
+      - name: 构建（子路径）
+        run: npm run build:pages
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - name: 产物检查
+        run: test -f dist/sw.js && test -f dist/manifest.webmanifest && cat dist/version.json
+
+  e2e:
+    name: 端到端（WebKit + Chromium，手机设备模拟）
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 安装 Playwright 浏览器
+        run: npx playwright install --with-deps chromium webkit
+      - name: 子路径构建
+        run: npm run build:pages
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - name: E2E
+        run: npx playwright test
+        env:
+          CI: '1'
+          E2E_BASE: /${{ github.event.repository.name }}/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

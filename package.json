@@ -1,0 +1,28 @@
+{
+  "name": "sudoku-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:pages": "BASE_PATH=${BASE_PATH:-/openai-quota-watch/} vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:full": "FULL_SAMPLE=1 vitest run tests/batch",
+    "e2e": "npm run build:pages && playwright test",
+    "e2e:only": "playwright test",
+    "icons": "node scripts/gen-icons.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "preact": "^10.29.8"
+  }
+}
