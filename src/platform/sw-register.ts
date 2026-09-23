@@ -5,7 +5,7 @@
 //  - 应用启动时（尚未进入任何对局）若发现 waiting 版本，立即切换并刷新一次，随后轻提示“已更新”；
 //  - 应用回到前台且当前位于首页（非对局中）时，同样可以切换；
 //  - 对局中永远不刷新。
-import { features } from './env';
+import { features, isNativeApp } from './env';
 
 const UPDATED_FLAG = 'sudoku.justUpdated';
 const BUILD_ID = `${__APP_VERSION__}|${__BUILD_TIME__}|${__BUILD_TAG__}`;
@@ -22,7 +22,8 @@ export function swBaseUrl(): string {
 
 export async function registerServiceWorker(guard: Guard): Promise<ServiceWorkerRegistration | null> {
   canReload = guard;
-  if (!features.serviceWorker || import.meta.env.DEV) return null;
+  // APK 内资源本来就打包在本地，不需要（也不适合）Service Worker；更新走应用商店式覆盖安装
+  if (!features.serviceWorker || import.meta.env.DEV || isNativeApp) return null;
   const base = swBaseUrl();
   try {
     registration = await navigator.serviceWorker.register(`${base}sw.js`, { scope: base });

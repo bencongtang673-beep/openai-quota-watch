@@ -1,7 +1,7 @@
 {
   "name": "sudoku-pwa",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,10 +13,11 @@
     "e2e": "npm run build:e2e && playwright test",
     "e2e:only": "playwright test",
     "icons": "node scripts/gen-icons.mjs",
-    "build:e2e": "npm run build:pages && BUILD_TAG=next BASE_PATH=${BASE_PATH:-/openai-quota-watch/} vite build --outDir dist-next"
+    "build:e2e": "npm run build:pages && BUILD_TAG=next BASE_PATH=${BASE_PATH:-/openai-quota-watch/} vite build --outDir dist-next && BASE_PATH=/ vite build --outDir dist-apk"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@capacitor/cli": "^8.5.2",
     "@playwright/test": "^1.63.0",
     "@preact/preset-vite": "^2.10.6",
     "@types/node": "^26.6.2",
@@ -27,6 +28,8 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "lz-string": "^1.5.0",
     "preact": "^10.29.8"
   }

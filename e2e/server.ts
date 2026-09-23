@@ -8,7 +8,7 @@ let seq = 0;
  * （WebKit 的 context.setOffline 会连 Service Worker 的响应一起拦截，与真机行为不符，
  *   所以离线测试统一用“关掉服务器”的方式；Chromium 额外再叠加 setOffline。）
  */
-export async function startIsolatedServer(dir = 'dist'): Promise<{
+export async function startIsolatedServer(dir = 'dist', base = E2E_BASE): Promise<{
   url: string;
   port: number;
   stop: () => Promise<void>;
@@ -17,7 +17,7 @@ export async function startIsolatedServer(dir = 'dist'): Promise<{
   const port = 4300 + ((process.pid * 7 + seq++ * 13 + Math.floor(Math.random() * 400)) % 4000);
   const proc: ChildProcess = spawn(
     'node',
-    ['scripts/serve.mjs', '--dir', dir, '--base', E2E_BASE, '--port', String(port)],
+    ['scripts/serve.mjs', '--dir', dir, '--base', base, '--port', String(port)],
     { stdio: ['ignore', 'pipe', 'inherit'] },
   );
   await new Promise<void>((resolve, reject) => {
@@ -30,7 +30,7 @@ export async function startIsolatedServer(dir = 'dist'): Promise<{
     });
     proc.once('exit', () => reject(new Error('server exited early')));
   });
-  const url = `http://localhost:${port}${E2E_BASE}`;
+  const url = `http://localhost:${port}${base}`;
   return {
     url,
     port,

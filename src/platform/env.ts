@@ -17,8 +17,14 @@ export const isInAppBrowser: boolean = isWeChat || isQQInApp;
 /** iOS 上的非 Safari 浏览器（Chrome/Edge/Firefox for iOS），它们不能“添加到主屏幕”为独立 App（iOS 16.4 前）。 */
 export const isIOSNonSafari: boolean = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
 
+/** 运行在安卓 APK（Capacitor 原生壳）中 */
+export const isNativeApp: boolean =
+  typeof window !== 'undefined' &&
+  !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+
 export function isStandalone(): boolean {
   if (typeof window === 'undefined') return false;
+  if (isNativeApp) return true;
   const mm = typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
   const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
   return Boolean(mm || iosStandalone);

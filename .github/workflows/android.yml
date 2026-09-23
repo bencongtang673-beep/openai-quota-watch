@@ -1,0 +1,77 @@
+name: 安卓 APK
+
+# 触发：手动运行 / 推送 v 开头的标签（发布到 Releases）；改动本工作流或打包配置的 PR 只做调试构建验证
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/android.yml
+      - scripts/android-prepare.sh
+      - capacitor.config.ts
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+      - name: 生成安卓工程
+        run: bash scripts/android-prepare.sh
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+      - name: 构建（有固定签名密钥 → 正式版；没有 → 仅调试版）
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          if [ "$HAS_KEY" = "true" ]; then ./gradlew --no-daemon assembleRelease; else ./gradlew --no-daemon assembleDebug; fi
+      - name: 用固定密钥签名
+        if: env.HAS_KEY == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > release.jks
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=$(ls android/app/build/outputs/apk/release/*-unsigned.apk | head -1)
+          "$BT/zipalign" -p -f 4 "$UNSIGNED" aligned.apk
+          "$BT/apksigner" sign --ks release.jks --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASS --out sudoku.apk aligned.apk
+          "$BT/apksigner" verify --print-certs sudoku.apk | head -5
+          rm -f release.jks aligned.apk
+      - name: 调试版（未配置签名密钥时）
+        if: env.HAS_KEY != 'true'
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk sudoku-debug.apk
+          echo "::warning::未配置 ANDROID_KEYSTORE_BASE64 等 Secret，只生成了调试版 APK（每次签名不同，不能覆盖安装）。"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: sudoku*.apk
+          retention-days: 14
+      - name: 发布到 GitHub Releases
+        if: env.HAS_KEY == 'true' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('apk-{0}', github.run_number) }}
+          name: 数独 APK ${{ github.ref_name }} (#${{ github.run_number }})
+          files: sudoku.apk
+          body: 用固定密钥签名的安卓安装包。覆盖安装即可升级，存档保留。

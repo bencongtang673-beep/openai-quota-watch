@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'preact/hooks';
 import { getGeometry, STANDARD_BOXES } from '../../engine/geometry';
 import { LEVEL_NAMES, LEVELS, MODE_NAMES, MODES, type Level, type Mode } from '../../engine/types';
 import { progressPct } from '../../game/game';
-import { features } from '../../platform/env';
+import { features, isNativeApp } from '../../platform/env';
 import { sound } from '../../platform/audio';
 import {
   applySettingsSideEffects,
@@ -492,10 +492,12 @@ export function BackupLayer() {
           包含全部 {a.games.length} 个残局（含完整撤销历史）、{a.history.length} 条历史记录、统计、设置和 {a.fingerprints.size} 个已玩题目指纹。iPhone 与安卓格式相同，可以互相导入。
         </p>
         <div class="stack">
-          <button class="btn primary block" onClick={exportFile} data-testid="backup-export-file">
-            导出为 JSON 文件
-          </button>
-          <button class="btn block" onClick={exportText} data-testid="backup-export-text">
+          {!isNativeApp && (
+            <button class="btn primary block" onClick={exportFile} data-testid="backup-export-file">
+              导出为 JSON 文件
+            </button>
+          )}
+          <button class={`btn block ${isNativeApp ? 'primary' : ''}`} onClick={exportText} data-testid="backup-export-text">
             导出为文本码（复制到剪贴板）
           </button>
         </div>
