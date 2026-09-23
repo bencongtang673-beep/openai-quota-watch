@@ -23,14 +23,16 @@ export default defineConfig({
     { name: 'pixel-chromium', use: { ...devices['Pixel 7'], browserName: 'chromium' }, testIgnore: TIMING },
     { name: 'galaxy-chromium', use: { ...devices['Galaxy S24'], browserName: 'chromium' }, testIgnore: TIMING },
     // 计时敏感的测试（性能、主线程分片）在功能测试全部结束后再跑，避免并行负载干扰测量
-    ...(['iphone-webkit', 'pixel-chromium', 'galaxy-chromium'] as const).map((name) => ({
+    // 三个计时项目依次串行（后一个依赖前一个），彼此不争 CPU
+    ...(['iphone-webkit', 'pixel-chromium', 'galaxy-chromium'] as const).map((name, i, all) => ({
       name: `${name}-timing`,
       use: {
         ...devices[name === 'iphone-webkit' ? 'iPhone 15 Pro Max' : name === 'pixel-chromium' ? 'Pixel 7' : 'Galaxy S24'],
         browserName: (name === 'iphone-webkit' ? 'webkit' : 'chromium') as 'webkit' | 'chromium',
       },
       testMatch: TIMING,
-      dependencies: ['iphone-webkit', 'pixel-chromium', 'galaxy-chromium'],
+      fullyParallel: false,
+      dependencies: i === 0 ? ['iphone-webkit', 'pixel-chromium', 'galaxy-chromium'] : [`${all[i - 1]}-timing`],
     })),
   ],
   webServer: {

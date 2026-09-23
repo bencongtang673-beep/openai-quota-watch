@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { openHome } from './helpers';
 
+test.describe.configure({ mode: 'serial' });
+
 for (const [mode, level] of [
   ['classic', 4],
   ['samurai', 2],
@@ -15,7 +17,7 @@ for (const [mode, level] of [
         const w0 = performance.now();
         await (window as any).__sudokuGenMain(m, l);
         const warm = performance.now() - w0;
-        // 4ms 心跳：测主线程两次得到执行机会之间的最大间隔
+        // 4ms 心跳，连续出 5 道题汇总统计
         const gaps: number[] = [];
         let last = performance.now();
         const timer = setInterval(() => {
@@ -24,19 +26,24 @@ for (const [mode, level] of [
           last = t;
         }, 4);
         const t0 = performance.now();
-        const p = await (window as any).__sudokuGenMain(m, l);
+        let p: any = null;
+        let allOk = true;
+        for (let k = 0; k < 5; k++) {
+          p = await (window as any).__sudokuGenMain(m, l);
+          allOk = allOk && !!p && p.level === l;
+        }
         const total = performance.now() - t0;
         clearInterval(timer);
         gaps.sort((a, b) => a - b);
-        return { ok: !!p && p.level === l, max: gaps[gaps.length - 1], p99: gaps[Math.floor(gaps.length * 0.99)], n: gaps.length, total, warm };
+        return { ok: allOk, max: gaps[gaps.length - 1], p95: gaps[Math.floor(gaps.length * 0.95)], n: gaps.length, total, warm };
       },
       [mode, level] as const,
     );
     console.log(mode, JSON.stringify(r));
     expect(r.ok).toBe(true);
     expect(r.n).toBeGreaterThan(0);
-    // 每片 ≤12ms 后让出；单个不可分割的技巧搜索偶尔更长。要求 P99 < 50ms、最大 < 150ms（界面不会冻结）
-    expect(r.p99).toBeLessThan(50);
+    // 每片 ≤12ms 后让出；GC / JIT 或单个不可分割的技巧搜索偶尔更长。要求 P95 < 34ms、最大 < 150ms（界面不会冻结）
+    expect(r.p95).toBeLessThan(34);
     expect(r.max).toBeLessThan(150);
   });
 }

@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { openHome } from './helpers';
 
+test.describe.configure({ mode: 'serial' });
+
 // 出题性能：正常 CPU 与 4 倍降速（模拟中低端安卓）各测一份，写入 reports/perf.md。
 // CPU 降速依赖 Chromium 的 CDP，只在 pixel-chromium 上跑。
 const MODES = (process.env.PERF_MODES ?? 'classic').split(',');

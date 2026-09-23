@@ -44,3 +44,19 @@ import { sound } from './platform/audio';
 (window as unknown as { __sudokuSound: unknown }).__sudokuSound = sound;
 import { stopPoolFilling } from './app/pool';
 (window as unknown as { __sudokuStopPool: unknown }).__sudokuStopPool = stopPoolFilling;
+import { generateIter } from './engine/generate';
+(window as unknown as { __sudokuGenGaps: unknown }).__sudokuGenGaps = (mode: Mode, level: Level, seed: number) => {
+  const it = generateIter({ mode, level, seed, fineSlices: true });
+  const long: string[] = [];
+  let last = performance.now();
+  let lp = 'start';
+  for (;;) {
+    const r = it.next();
+    const t = performance.now();
+    if (t - last > 30) long.push(`${lp}→${r.done ? 'done' : r.value.phase}:${Math.round(t - last)}`);
+    last = t;
+    if (r.done) break;
+    lp = r.value.phase;
+  }
+  return long;
+};
