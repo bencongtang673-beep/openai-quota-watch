@@ -1,15 +1,24 @@
 import { render } from 'preact';
 import './app/base.css';
-import './app/shell.css';
-import { Shell } from './app/Shell';
+import './app/app.css';
+import { App } from './app/App';
+import { initApp, installGameLifecycle, onLeaveGame } from './app/actions';
+import { installNav } from './app/nav';
+import { installPoolLifecycle } from './app/pool';
+import { app } from './app/store';
+import { installAudioLifecycle } from './platform/audio';
+import { installGlobalGuards } from './platform/guards';
 import { initInstallPrompt } from './platform/install';
 import { registerServiceWorker } from './platform/sw-register';
-import { requestPersistentStorage } from './platform/env';
-import { installGlobalGuards } from './platform/guards';
 
 installGlobalGuards();
 initInstallPrompt();
-render(<Shell />, document.getElementById('app')!);
-// M0 空壳没有对局，任何时刻都可安全切换新版本
-registerServiceWorker(() => true);
-requestPersistentStorage();
+installAudioLifecycle();
+installNav(onLeaveGame);
+installGameLifecycle();
+render(<App />, document.getElementById('app')!);
+initApp().then(() => {
+  installPoolLifecycle();
+});
+// 只有不在对局中时才允许切换到新版本（对局中绝不强制刷新）
+registerServiceWorker(() => app.screen !== 'game');

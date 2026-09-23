@@ -19,6 +19,12 @@
     <title>数独</title>
   </head>
   <body>
+    <script>
+      // 首帧前按系统主题设置深浅色，避免闪烁；正式设置在应用加载后覆盖
+      try {
+        document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      } catch (e) {}
+    </script>
     <div id="app"></div>
     <noscript>请开启 JavaScript 后使用。</noscript>
     <script type="module" src="/src/main.tsx"></script>
